@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const viewer = document.getElementById("viewer");
 const loading = document.getElementById("loading");
@@ -12,7 +13,12 @@ const resetBtn = document.getElementById("resetBtn");
 const identifyBtn = document.getElementById("identifyBtn");
 const closeBtn = document.getElementById("closeBtn");
 
+
 const tg = window.Telegram?.WebApp;
+
+const MODEL_URL = null;
+const gltfLoader = new GLTFLoader();
+let loadedAnatomyModel = null;
 
 if (tg) {
     tg.ready();
@@ -211,6 +217,24 @@ function buildSkeleton() {
 }
 
 buildSkeleton();
+async function loadAnatomyModel(url) {
+    if (!url) return null;
+
+    return new Promise((resolve, reject) => {
+        gltfLoader.load(
+            url,
+            (gltf) => {
+                loadedAnatomyModel = gltf.scene;
+                resolve(loadedAnatomyModel);
+            },
+            undefined,
+            (error) => {
+                console.error("Anatomy model failed to load:", error);
+                reject(error);
+            }
+        );
+    });
+}
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
