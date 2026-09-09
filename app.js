@@ -15,11 +15,81 @@ const identifyBtn = document.getElementById("identifyBtn");
 const closeBtn = document.getElementById("closeBtn");
 
 
+const identifyPanel = document.getElementById("identifyPanel");
+const identifyQuestion = document.getElementById("identifyQuestion");
+const identifyAttemptsEl = document.getElementById("identifyAttempts");
+const identifyScoreEl = document.getElementById("identifyScore");
+const identifyFeedback = document.getElementById("identifyFeedback");
+const identifyExitBtn = document.getElementById("identifyExitBtn");
+
 const tg = window.Telegram?.WebApp;
 
 const MODEL_URL = "./assets/anatomy/skeleton.glb";
 const gltfLoader = new GLTFLoader();
 let loadedAnatomyModel = null;
+// --------------------------------------------------------
+// IDENTIFY MODE
+// --------------------------------------------------------
+
+let identifyMode = false;
+let identifyTarget = null;
+let identifyAttempts = 0;
+let identifyScore = 0;
+const IDENTIFY_POOL = Object.keys(SKELETON_DATA);
+
+function startIdentifyChallenge() {
+    if (!loadedAnatomyModel || IDENTIFY_POOL.length === 0) {
+        return;
+    }
+
+    identifyMode = true;
+    identifyAttempts = 0;
+    identifyScore = 0;
+
+    identifyPanel.classList.remove("hidden");
+
+    chooseNextIdentifyTarget();
+}
+
+function chooseNextIdentifyTarget() {
+    const randomIndex = Math.floor(
+        Math.random() * IDENTIFY_POOL.length
+    );
+
+    identifyTarget = IDENTIFY_POOL[randomIndex];
+
+    const data = SKELETON_DATA[identifyTarget];
+
+    identifyQuestion.textContent =
+        `Find the ${data.name}.`;
+
+    identifyAttemptsEl.textContent = "Attempts: 0";
+
+    identifyScoreEl.textContent =
+        `Score: ${identifyScore}`;
+
+    identifyFeedback.textContent =
+        "Rotate the model and tap the structure you think is correct.";
+}
+
+function exitIdentifyMode() {
+    identifyMode = false;
+    identifyTarget = null;
+
+    identifyPanel.classList.add("hidden");
+
+    clearSelection();
+
+    structureName.textContent = "Human Skeleton";
+
+    structureInfo.textContent =
+        "Explore the major bones of the human skeleton. Rotate the model and select a structure to begin.";
+
+    structureMeta.innerHTML = `
+        <span>🦴 Skeletal System</span>
+        <span>🔬 Explore Mode</span>
+    `;
+}
 
 if (tg) {
     tg.ready();
@@ -311,8 +381,6 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
 let selected = null;
-let identifyMode = false;
-let targetBone = null;
 
 function clearSelection() {
     for (const mesh of clickable) {
@@ -425,7 +493,6 @@ function getRegion(name) {
 }
 
 function pointerDown(event) {
-
     const rect = renderer.domElement.getBoundingClientRect();
 
     pointer.x =
@@ -443,15 +510,31 @@ function pointerDown(event) {
     const mesh = hits[0].object;
 
     if (identifyMode) {
-        if (targetBone && mesh === targetBone) {
-            identifyMode = false;
+        const key = mesh.userData.modelKey || mesh.name;
+
+        identifyAttempts += 1;
+
+        identifyAttemptsEl.textContent =
+            `Attempts: ${identifyAttempts}`;
+
+        if (key === identifyTarget) {
+            identifyScore += 1;
+
+            identifyScoreEl.textContent =
+                `Score: ${identifyScore}`;
+
+            identifyFeedback.textContent =
+                `✦ Correct! You identified the ${SKELETON_DATA[identifyTarget].name}.`;
+
             selectBone(mesh);
 
-            identifyBtn.textContent = "🎯 Identify Another Bone";
-            structureInfo.textContent =
-                `✦ Correct. You identified the ${mesh.userData.name}.`;
+            setTimeout(() => {
+                if (identifyMode) {
+                    chooseNextIdentifyTarget();
+                }
+            }, 900);
         } else {
-            structureInfo.textContent =
+            identifyFeedback.textContent =
                 "◇ Not quite. Try another structure.";
         }
 
@@ -463,31 +546,6 @@ function pointerDown(event) {
 
 renderer.domElement.addEventListener("pointerdown", pointerDown);
 
-identifyBtn.addEventListener("click", () => {
-
-    const candidates = clickable.filter(
-        mesh =>
-            !mesh.userData.name.includes("Ribs") &&
-            !mesh.userData.name.includes("Hand") &&
-            !mesh.userData.name.includes("Foot") &&
-            mesh.userData.name !== "Vertebral Column"
-    );
-
-    targetBone =
-        candidates[Math.floor(Math.random() * candidates.length)];
-
-    clearSelection();
-
-    identifyMode = true;
-
-    structureName.textContent = "🎯 Find This Structure";
-
-    structureInfo.textContent =
-        `Tap the ${targetBone.userData.name} on the 3D skeleton.`;
-
-    structureMeta.innerHTML =
-        `<span>🎯 Identification Challenge</span>`;
-});
 
 resetBtn.addEventListener("click", () => {
     camera.position.set(0, 1.0, 8.5);
@@ -495,7 +553,6 @@ resetBtn.addEventListener("click", () => {
     controls.update();
 
     identifyMode = false;
-    targetBone = null;
     clearSelection();
 
     structureName.textContent = "Human Skeleton";
@@ -505,7 +562,6 @@ resetBtn.addEventListener("click", () => {
     structureMeta.innerHTML =
         "<span>🦴 Skeletal System</span><span>🔬 Explore Mode</span>";
 
-    identifyBtn.textContent = "🎯 Identify a Bone";
 });
 
 closeBtn.addEventListener("click", () => {
@@ -541,3 +597,5 @@ function animate() {
 }
 
 animate();
+identifyBtn.addEventListener("click", startIdentifyChallenge);
+identifyExitBtn.addEventListener("click", exitIdentifyMode);
