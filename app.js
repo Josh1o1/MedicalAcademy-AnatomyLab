@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { SKELETON_DATA } from "./anatomy/skeleton-data.js";
 
 const viewer = document.getElementById("viewer");
 const loading = document.getElementById("loading");
@@ -257,25 +258,28 @@ async function initRealAnatomy() {
         }
 
         model.traverse((object) => {
-            if (!object.isMesh) return;
+    if (!object.isMesh) return;
 
-            object.userData.isRealAnatomy = true;
-            object.userData.name =
-                object.name ||
-                object.parent?.name ||
-                "Anatomical Structure";
+    object.userData.isRealAnatomy = true;
 
-            object.userData.defaultMaterial = object.material;
+    object.userData.name =
+        object.name ||
+        object.parent?.name ||
+        "Anatomical Structure";
 
-            if (object.material) {
-                object.material = object.material.clone();
-            }
+    object.userData.modelKey = object.name;
 
-            object.castShadow = false;
-            object.receiveShadow = false;
+    object.userData.defaultMaterial = object.material;
 
-            clickable.push(object);
-        });
+    if (object.material) {
+        object.material = object.material.clone();
+    }
+
+    object.castShadow = false;
+    object.receiveShadow = false;
+
+    clickable.push(object);
+});
 
         anatomy.add(model);
 
@@ -336,19 +340,34 @@ function selectBone(mesh) {
             mesh.material = selectedMaterial;
         }
 
-        const name =
-            mesh.userData.name ||
-            mesh.name ||
-            "Anatomical Structure";
+        const key = mesh.userData.modelKey || mesh.name;
+const data = SKELETON_DATA[key];
 
-        structureName.textContent = name;
-        structureInfo.textContent =
-            "Anatomical structure from the 3D anatomy model.";
+const name =
+    data?.name ||
+    mesh.userData.name ||
+    mesh.name ||
+    "Anatomical Structure";
 
-        structureMeta.innerHTML = `
-            <span>🧬 Anatomy Lab</span>
-            <span>🔬 Explore Mode</span>
-        `;
+structureName.textContent = name;
+
+if (data) {
+    structureInfo.textContent = data.description;
+
+    structureMeta.innerHTML = `
+        <span>🦴 ${data.system}</span>
+        <span>📍 ${data.region}</span>
+        <span>⚙️ ${data.function}</span>
+    `;
+} else {
+    structureInfo.textContent =
+        "Anatomical structure from the 3D anatomy model.";
+
+    structureMeta.innerHTML = `
+        <span>🧬 Anatomy Lab</span>
+        <span>🔬 Explore Mode</span>
+    `;
+}
 
         return;
     }
