@@ -16,7 +16,7 @@ const closeBtn = document.getElementById("closeBtn");
 
 const tg = window.Telegram?.WebApp;
 
-const MODEL_URL = null;
+const MODEL_URL = "./assets/anatomy/skeleton.glb";
 const gltfLoader = new GLTFLoader();
 let loadedAnatomyModel = null;
 
@@ -235,7 +235,74 @@ async function loadAnatomyModel(url) {
         );
     });
 }
+async function initRealAnatomy() {
+    if (!MODEL_URL) return;
 
+    try {
+        const model = await loadAnatomyModel(MODEL_URL);
+
+        model.position.set(0, 0, 0);
+
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        model.position.sub(center);
+
+        const maxDimension = Math.max(size.x, size.y, size.z);
+        const targetHeight = 6.5;
+
+        if (maxDimension > 0) {
+            model.scale.setScalar(targetHeight / maxDimension);
+        }
+
+        model.traverse((object) => {
+            if (!object.isMesh) return;
+
+            object.userData.isRealAnatomy = true;
+            object.userData.name =
+                object.name ||
+                object.parent?.name ||
+                "Anatomical Structure";
+
+            object.userData.defaultMaterial = object.material;
+
+            if (object.material) {
+                object.material = object.material.clone();
+            }
+
+            object.castShadow = false;
+            object.receiveShadow = false;
+
+            clickable.push(object);
+        });
+
+        anatomy.add(model);
+
+        // Hide the procedural prototype once the real model is ready.
+        for (const mesh of boneMeshes.values()) {
+            mesh.visible = false;
+        }
+
+        loadedAnatomyModel = model;
+
+        console.log(
+            "Real anatomy model loaded:",
+            clickable.filter(
+                (mesh) => mesh.userData.isRealAnatomy
+            ).length,
+            "meshes"
+        );
+
+    } catch (error) {
+        console.error(
+            "Real anatomy model could not be loaded. Keeping prototype.",
+            error
+        );
+    }
+}
+
+initRealAnatomy();
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
@@ -245,12 +312,46 @@ let targetBone = null;
 
 function clearSelection() {
     for (const mesh of clickable) {
-        mesh.material = mesh.userData.defaultMaterial;
+        if (mesh.userData?.isRealAnatomy) {
+            if (mesh.userData.defaultMaterial) {
+                mesh.material = mesh.userData.defaultMaterial;
+            }
+        } else if (mesh.userData?.defaultMaterial) {
+            mesh.material = mesh.userData.defaultMaterial;
+        }
     }
+
     selected = null;
 }
 
 function selectBone(mesh) {
+    if (!mesh || !mesh.userData) return;
+
+    if (mesh.userData.isRealAnatomy) {
+        clearSelection();
+
+        selected = mesh;
+
+        if (mesh.material) {
+            mesh.material = selectedMaterial;
+        }
+
+        const name =
+            mesh.userData.name ||
+            mesh.name ||
+            "Anatomical Structure";
+
+        structureName.textContent = name;
+        structureInfo.textContent =
+            "Anatomical structure from the 3D anatomy model.";
+
+        structureMeta.innerHTML = `
+            <span>🧬 Anatomy Lab</span>
+            <span>🔬 Explore Mode</span>
+        `;
+
+        return;
+    }
     clearSelection();
 
     selected = mesh;
