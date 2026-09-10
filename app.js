@@ -2,11 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import {
-    SKELETON_DATA,
-    getSkeletonData,
-} from "./anatomy/skeleton-data.js";
-import { buildSkeletonCatalog } from "./anatomy/skeleton-catalog.js";
+import { ANATOMY_SYSTEMS } from "./systems/index.js";
 
 const viewer = document.getElementById("viewer");
 const loading = document.getElementById("loading");
@@ -29,9 +25,98 @@ const identifyExitBtn = document.getElementById("identifyExitBtn");
 
 const tg = window.Telegram?.WebApp;
 
-const MODEL_URL = "./assets/anatomy/skeleton.glb";
+// --------------------------------------------------------
+// ANATOMY LAB SYSTEM ENGINE
+// --------------------------------------------------------
+
+// System registry is provided by systems/index.js.
+
+let currentSystem = "skeletal";
+
+function getCurrentSystem() {
+    return ANATOMY_SYSTEMS[currentSystem];
+}
+
 const gltfLoader = new GLTFLoader();
 let loadedAnatomyModel = null;
+
+function setCurrentSystem(systemId) {
+    const system = ANATOMY_SYSTEMS[systemId];
+
+    if (!system) {
+        console.warn("Unknown anatomy system:", systemId);
+        return false;
+    }
+
+    if (!system.available) {
+        structureName.textContent = `${system.icon} ${system.name}`;
+        structureInfo.textContent =
+            "This anatomy system is being prepared for the lab.";
+        structureMeta.innerHTML = `
+            <span>🧬 Anatomy Lab</span>
+            <span>◌ Coming Soon</span>
+        `;
+
+        return false;
+    }
+
+    currentSystem = systemId;
+
+    console.log("Active anatomy system:", system.name);
+
+    return true;
+}
+
+// --------------------------------------------------------
+// SYSTEM SELECTOR
+// --------------------------------------------------------
+
+const systemButtons = document.querySelectorAll(".system-btn");
+
+function updateSystemSelector() {
+    systemButtons.forEach((button) => {
+        const isActive =
+            button.dataset.system === currentSystem;
+
+        button.classList.toggle("active", isActive);
+    });
+}
+
+async function handleSystemSelection(systemId) {
+    const previousSystem = currentSystem;
+    const changed = setCurrentSystem(systemId);
+
+    if (!changed) {
+        updateSystemSelector();
+        return;
+    }
+
+    if (previousSystem === systemId) {
+        updateSystemSelector();
+        return;
+    }
+
+    updateSystemSelector();
+
+    await loadCurrentSystem();
+}
+
+systemButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+
+        const systemId = button.dataset.system;
+
+        handleSystemSelection(systemId).catch((error) => {
+            console.error(
+                "Anatomy system switch failed:",
+                error
+            );
+        });
+    });
+});
+
+updateSystemSelector();
 // --------------------------------------------------------
 // IDENTIFY MODE
 // --------------------------------------------------------
@@ -45,7 +130,7 @@ let identifyBestStreak = 0;
 let identifyQuestions = 0;
 const IDENTIFY_SESSION_LENGTH = 10;
 let IDENTIFY_POOL = [];
-let SKELETON_CATALOG = [];
+let ACTIVE_CATALOG = [];
 let identifyDifficulty = null;
 
 const difficultySelector =
@@ -64,7 +149,7 @@ const identifyNextBtn =
     document.getElementById("identifyNextBtn");
 
 function startIdentifyChallenge() {
-    if (!loadedAnatomyModel || SKELETON_CATALOG.length === 0) {
+    if (!loadedAnatomyModel || ACTIVE_CATALOG.length === 0) {
         return;
     }
 
@@ -90,7 +175,7 @@ function startIdentifyChallenge() {
 }
 
 function startDifficultyChallenge(difficulty) {
-    const pool = SKELETON_CATALOG
+    const pool = ACTIVE_CATALOG
         .filter((item) => item.difficulty === difficulty)
         .map((item) => item.key);
 
@@ -247,7 +332,7 @@ function chooseNextIdentifyTarget() {
 
     identifyTarget = IDENTIFY_POOL[randomIndex];
 
-    const data = getSkeletonData(identifyTarget);
+    const data = getCurrentSystem().getData?.(identifyTarget);
 
     const displayName =
         data?.name ||
@@ -274,15 +359,20 @@ function exitIdentifyMode() {
 
     clearSelection();
 
-    structureName.textContent = "Human Skeleton";
+    const system = getCurrentSystem();
+
+    structureName.textContent =
+        system.getDefaultTitle?.() ||
+        system.name;
 
     structureInfo.textContent =
-        "Explore the major bones of the human skeleton. Rotate the model and select a structure to begin.";
+        system.getDefaultDescription?.() ||
+        system.description ||
+        "Explore this anatomy system in 3D.";
 
-    structureMeta.innerHTML = `
-        <span>🦴 Skeletal System</span>
-        <span>🔬 Explore Mode</span>
-    `;
+    structureMeta.innerHTML =
+        system.getDefaultMeta?.() ||
+        `<span>🧬 ${system.name}</span><span>🔬 Explore Mode</span>`;
 }
 
 if (tg) {
@@ -489,7 +579,7 @@ async function loadAnatomyModel(url) {
     if (!url) return null;
 
     return new Promise((resolve, reject) => {
-        console.log("🦴 Requesting skeleton:", url);
+        console.log("🧬 Requesting anatomy model:", url);
         gltfLoader.load(
             url,
             (gltf) => {
@@ -504,12 +594,10 @@ async function loadAnatomyModel(url) {
         );
     });
 }
-async function initRealAnatomy() {
-    console.log("🦴 initRealAnatomy() started");
-    if (!MODEL_URL) return;
-
+async function initCurrentSystem() {
+    console.log("🧬 initCurrentSystem() started:", getCurrentSystem().name);
     try {
-        const model = await loadAnatomyModel(MODEL_URL);
+        const model = await loadAnatomyModel(getCurrentSystem().modelUrl);
 
         model.position.set(0, 0, 0);
 
@@ -554,12 +642,13 @@ async function initRealAnatomy() {
     clickable.push(object);
 });
 
-        SKELETON_CATALOG = buildSkeletonCatalog(modelNames);
-        IDENTIFY_POOL = SKELETON_CATALOG.map((item) => item.key);
+        ACTIVE_CATALOG =
+        getCurrentSystem().buildCatalog?.(modelNames) || [];
+        IDENTIFY_POOL = ACTIVE_CATALOG.map((item) => item.key);
 
         console.log(
-            "Skeleton catalog built:",
-            SKELETON_CATALOG.length,
+            "Anatomy catalog built:",
+            ACTIVE_CATALOG.length,
             "structures"
         );
 
@@ -573,22 +662,143 @@ async function initRealAnatomy() {
         loadedAnatomyModel = model;
 
         console.log(
-            "Real anatomy model loaded:",
+            "Anatomy model loaded:",
             clickable.filter(
                 (mesh) => mesh.userData.isRealAnatomy
             ).length,
             "meshes"
         );
 
+        return true;
+
     } catch (error) {
         console.error(
-            "Real anatomy model could not be loaded. Keeping prototype.",
+            "Anatomy model could not be loaded. Keeping fallback geometry.",
             error
         );
+
+        return false;
     }
 }
 
-initRealAnatomy();
+
+function disposeAnatomyObject(root) {
+    if (!root) return;
+
+    root.traverse((object) => {
+        if (!object.isMesh) return;
+
+        if (object.geometry) {
+            object.geometry.dispose();
+        }
+
+        if (object.material) {
+            const materials = Array.isArray(object.material)
+                ? object.material
+                : [object.material];
+
+            for (const material of materials) {
+                material.dispose();
+            }
+        }
+    });
+
+    if (root.parent) {
+        root.parent.remove(root);
+    }
+}
+
+function clearCurrentSystem() {
+    // Remove real model meshes from the shared clickable list.
+    for (let i = clickable.length - 1; i >= 0; i--) {
+        if (clickable[i].userData?.isRealAnatomy) {
+            clickable.splice(i, 1);
+        }
+    }
+
+    // Remove the currently loaded GLB.
+    if (loadedAnatomyModel) {
+        disposeAnatomyObject(loadedAnatomyModel);
+        loadedAnatomyModel = null;
+    }
+
+    ACTIVE_CATALOG = [];
+    IDENTIFY_POOL = [];
+    identifyTarget = null;
+
+    identifyMode = false;
+    identifyDifficulty = null;
+
+    clearSelection();
+
+    identifyPanel.classList.add("hidden");
+    difficultySelector.classList.add("hidden");
+}
+
+async function loadCurrentSystem() {
+    const system = getCurrentSystem();
+
+    if (!system?.available) {
+        return false;
+    }
+
+    console.log(
+        "🧬 Loading anatomy system:",
+        system.name
+    );
+
+    clearCurrentSystem();
+
+    // Restore the procedural fallback while the real model loads.
+    for (const mesh of boneMeshes.values()) {
+        mesh.visible = true;
+    }
+
+    const loaded = await initCurrentSystem();
+
+    if (!loadedAnatomyModel) {
+        console.error(
+            "❌ No anatomy model loaded for:",
+            system.name
+        );
+        return false;
+    }
+
+    console.log(
+        "✅ Active anatomy system:",
+        system.name
+    );
+
+    resetAnatomyView();
+
+    return loaded !== false;
+}
+
+function resetAnatomyView() {
+    camera.position.set(0, 1.0, 8.5);
+    controls.target.set(0, 0.8, 0);
+    controls.update();
+
+    identifyMode = false;
+    identifyTarget = null;
+    clearSelection();
+
+    const system = getCurrentSystem();
+
+    structureName.textContent =
+        system.getDefaultTitle?.() ||
+        system.name;
+
+    structureInfo.textContent =
+        system.getDefaultDescription?.() ||
+        system.description ||
+        "Explore this anatomy system in 3D.";
+
+    structureMeta.innerHTML =
+        system.getDefaultMeta?.() ||
+        `<span>🧬 ${system.name}</span><span>🔬 Explore Mode</span>`;
+}
+
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
@@ -621,7 +831,7 @@ function selectBone(mesh) {
         }
 
         const key = mesh.userData.modelKey || mesh.name;
-const data = getSkeletonData(key);
+const data = getCurrentSystem().getData?.(key);
 
 const name =
     data?.name ||
@@ -746,7 +956,7 @@ function pointerDown(event) {
 
             updateIdentifyStats();
 
-            const correctData = getSkeletonData(identifyTarget);
+            const correctData = getCurrentSystem().getData?.(identifyTarget);
             const correctName =
                 correctData?.name ||
                 identifyTarget ||
@@ -791,20 +1001,7 @@ renderer.domElement.addEventListener("pointerdown", pointerDown);
 
 
 resetBtn.addEventListener("click", () => {
-    camera.position.set(0, 1.0, 8.5);
-    controls.target.set(0, 0.8, 0);
-    controls.update();
-
-    identifyMode = false;
-    clearSelection();
-
-    structureName.textContent = "Human Skeleton";
-    structureInfo.textContent =
-        "Explore the major bones of the human skeleton. Rotate the model and select a structure to begin.";
-
-    structureMeta.innerHTML =
-        "<span>🦴 Skeletal System</span><span>🔬 Explore Mode</span>";
-
+    resetAnatomyView();
 });
 
 closeBtn.addEventListener("click", () => {
@@ -856,4 +1053,15 @@ identifyExitBtn.addEventListener("pointerdown", (event) => {
 identifyExitBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     exitIdentifyMode();
+});
+
+// --------------------------------------------------------
+// INITIAL ANATOMY SYSTEM LOAD
+// --------------------------------------------------------
+
+loadCurrentSystem().catch((error) => {
+    console.error(
+        "Initial anatomy system load failed:",
+        error
+    );
 });

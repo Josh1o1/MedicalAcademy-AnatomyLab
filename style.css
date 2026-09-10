@@ -59,6 +59,111 @@ h1 {
     font-size: 25px;
 }
 
+.system-card {
+    margin-bottom: 14px;
+    padding: 17px 0 15px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.035);
+    overflow: hidden;
+}
+
+.system-card > .section-label,
+.system-card > .system-subtitle {
+    margin-left: 18px;
+    margin-right: 18px;
+}
+
+.system-subtitle {
+    margin-top: 6px;
+    margin-bottom: 14px;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    opacity: 0.64;
+}
+
+.system-grid {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 2px 18px 4px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.system-grid::-webkit-scrollbar {
+    display: none;
+}
+
+.system-btn {
+    flex: 0 0 132px;
+    min-height: 94px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.025);
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    scroll-snap-align: start;
+}
+
+.system-btn.active {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.075);
+}
+
+.system-btn.locked {
+    opacity: 0.42;
+}
+
+.system-btn:not(.locked):active {
+    transform: scale(0.98);
+}
+
+.system-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.system-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.system-copy strong {
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.system-copy small {
+    font-size: 0.65rem;
+    opacity: 0.58;
+    white-space: nowrap;
+}
+
+.system-status {
+    position: absolute;
+    top: 10px;
+    right: 11px;
+    font-size: 0.72rem;
+    opacity: 0.7;
+}
+
+.system-btn {
+    position: relative;
+}
+
 .viewer-card {
     position: relative;
     overflow: hidden;
