@@ -1,7 +1,12 @@
+
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { SKELETON_DATA } from "./anatomy/skeleton-data.js";
+import {
+    SKELETON_DATA,
+    getSkeletonData,
+} from "./anatomy/skeleton-data.js";
+import { buildSkeletonCatalog } from "./anatomy/skeleton-catalog.js";
 
 const viewer = document.getElementById("viewer");
 const loading = document.getElementById("loading");
@@ -35,33 +40,222 @@ let identifyMode = false;
 let identifyTarget = null;
 let identifyAttempts = 0;
 let identifyScore = 0;
-const IDENTIFY_POOL = Object.keys(SKELETON_DATA);
+let identifyStreak = 0;
+let identifyBestStreak = 0;
+let identifyQuestions = 0;
+const IDENTIFY_SESSION_LENGTH = 10;
+let IDENTIFY_POOL = [];
+let SKELETON_CATALOG = [];
+let identifyDifficulty = null;
+
+const difficultySelector =
+    document.getElementById("difficultySelector");
+
+const difficultyButtons =
+    document.querySelectorAll(".difficulty-btn");
+
+const identifyAccuracyEl =
+    document.getElementById("identifyAccuracy");
+
+const identifyStreakEl =
+    document.getElementById("identifyStreak");
+
+const identifyNextBtn =
+    document.getElementById("identifyNextBtn");
 
 function startIdentifyChallenge() {
-    if (!loadedAnatomyModel || IDENTIFY_POOL.length === 0) {
+    if (!loadedAnatomyModel || SKELETON_CATALOG.length === 0) {
         return;
     }
 
     identifyMode = true;
     identifyAttempts = 0;
     identifyScore = 0;
+    identifyStreak = 0;
+    identifyBestStreak = 0;
+    identifyQuestions = 0;
+    identifyDifficulty = null;
 
     identifyPanel.classList.remove("hidden");
+
+    difficultySelector.classList.remove("hidden");
+
+    identifyQuestion.textContent =
+        "Choose a difficulty to begin.";
+
+    updateIdentifyStats();
+
+    identifyFeedback.textContent =
+        "Select the challenge level that matches your current anatomy knowledge.";
+}
+
+function startDifficultyChallenge(difficulty) {
+    const pool = SKELETON_CATALOG
+        .filter((item) => item.difficulty === difficulty)
+        .map((item) => item.key);
+
+    if (pool.length === 0) {
+        identifyFeedback.textContent =
+            "No structures are available for this difficulty yet.";
+        return;
+    }
+
+    identifyDifficulty = difficulty;
+    IDENTIFY_POOL = pool;
+
+    difficultySelector.classList.add("hidden");
+
+    difficultyButtons.forEach((button) => {
+        button.classList.toggle(
+            "selected",
+            button.dataset.difficulty === difficulty
+        );
+    });
+
+    identifyAttempts = 0;
+    identifyScore = 0;
+    identifyStreak = 0;
+    identifyBestStreak = 0;
+    identifyQuestions = 0;
+
+    identifyAttemptsEl.textContent = "Attempts: 0";
+    identifyScoreEl.textContent = "Score: 0";
 
     chooseNextIdentifyTarget();
 }
 
+difficultyButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        startDifficultyChallenge(
+            button.dataset.difficulty
+        );
+    });
+});
+
+identifyNextBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+
+    if (!identifyMode || !identifyTarget) return;
+
+    identifyStreak = 0;
+    identifyAttempts = 0;
+
+    updateIdentifyStats();
+    chooseNextIdentifyTarget();
+});
+
+function updateIdentifyStats() {
+    const accuracy =
+        identifyAttempts > 0
+            ? Math.round(
+                (identifyScore / identifyAttempts) * 100
+            )
+            : 0;
+
+    identifyAttemptsEl.textContent =
+        `Attempts: ${identifyAttempts}`;
+
+    identifyScoreEl.textContent =
+        `Score: ${identifyScore}`;
+
+    identifyAccuracyEl.textContent =
+        `Accuracy: ${accuracy}%`;
+
+    identifyStreakEl.textContent =
+        `Streak: ${identifyStreak}`;
+}
+
+function showIdentifyComplete() {
+    const accuracy =
+        IDENTIFY_SESSION_LENGTH > 0
+            ? Math.round(
+                (identifyScore / IDENTIFY_SESSION_LENGTH) * 100
+            )
+            : 0;
+
+    const difficultyNames = {
+        beginner: "🌱 Beginner",
+        intermediate: "🔬 Intermediate",
+        advanced: "🧠 Advanced"
+    };
+
+    const difficultyName =
+        difficultyNames[identifyDifficulty] ||
+        "🎯 Identify Challenge";
+
+    let message =
+        "✦ Keep practicing your anatomy recognition.";
+
+    if (accuracy >= 90) {
+        message = "✦ Exceptional anatomy recognition.";
+    } else if (accuracy >= 80) {
+        message = "✦ Strong anatomy recognition.";
+    } else if (accuracy >= 60) {
+        message = "✦ Good foundation. Keep sharpening your recognition.";
+    }
+
+    identifyQuestion.textContent =
+        "🎯 IDENTIFY COMPLETE";
+
+    identifyFeedback.innerHTML = `
+        <div class="identify-complete">
+            <div class="complete-divider">━━━━━━━━━━━━━━━━━━━━</div>
+
+            <div class="complete-difficulty">
+                ${difficultyName}
+            </div>
+
+            <div class="complete-stat">
+                <span>Questions</span>
+                <strong>${IDENTIFY_SESSION_LENGTH}</strong>
+            </div>
+
+            <div class="complete-stat">
+                <span>Correct</span>
+                <strong>${identifyScore}</strong>
+            </div>
+
+            <div class="complete-stat">
+                <span>Accuracy</span>
+                <strong>${accuracy}%</strong>
+            </div>
+
+            <div class="complete-stat">
+                <span>Best streak</span>
+                <strong>${identifyBestStreak}</strong>
+            </div>
+
+            <div class="complete-message">
+                ${message}
+            </div>
+        </div>
+    `;
+
+    identifyNextBtn.classList.add("hidden");
+    identifyExitBtn.textContent = "↻ Exit Identify Mode";
+
+    identifyTarget = null;
+    clearSelection();
+}
+
 function chooseNextIdentifyTarget() {
+    identifyNextBtn.classList.add("hidden");
     const randomIndex = Math.floor(
         Math.random() * IDENTIFY_POOL.length
     );
 
     identifyTarget = IDENTIFY_POOL[randomIndex];
 
-    const data = SKELETON_DATA[identifyTarget];
+    const data = getSkeletonData(identifyTarget);
+
+    const displayName =
+        data?.name ||
+        identifyTarget ||
+        "requested structure";
 
     identifyQuestion.textContent =
-        `Find the ${data.name}.`;
+        `Find the ${displayName}.`;
 
     identifyAttemptsEl.textContent = "Attempts: 0";
 
@@ -122,7 +316,9 @@ viewer.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 
 controls.enableDamping = true;
-controls.enablePan = false;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.panSpeed = 0.8;
 controls.minDistance = 4;
 controls.maxDistance = 14;
 controls.target.set(0, 0.8, 0);
@@ -289,9 +485,11 @@ function buildSkeleton() {
 
 buildSkeleton();
 async function loadAnatomyModel(url) {
+    console.log("🦴 loadAnatomyModel called:", url);
     if (!url) return null;
 
     return new Promise((resolve, reject) => {
+        console.log("🦴 Requesting skeleton:", url);
         gltfLoader.load(
             url,
             (gltf) => {
@@ -307,6 +505,7 @@ async function loadAnatomyModel(url) {
     });
 }
 async function initRealAnatomy() {
+    console.log("🦴 initRealAnatomy() started");
     if (!MODEL_URL) return;
 
     try {
@@ -327,7 +526,9 @@ async function initRealAnatomy() {
             model.scale.setScalar(targetHeight / maxDimension);
         }
 
-        model.traverse((object) => {
+        const modelNames = [];
+
+    model.traverse((object) => {
     if (!object.isMesh) return;
 
     object.userData.isRealAnatomy = true;
@@ -338,6 +539,8 @@ async function initRealAnatomy() {
         "Anatomical Structure";
 
     object.userData.modelKey = object.name;
+
+        modelNames.push(object.name);
 
     object.userData.defaultMaterial = object.material;
 
@@ -350,6 +553,15 @@ async function initRealAnatomy() {
 
     clickable.push(object);
 });
+
+        SKELETON_CATALOG = buildSkeletonCatalog(modelNames);
+        IDENTIFY_POOL = SKELETON_CATALOG.map((item) => item.key);
+
+        console.log(
+            "Skeleton catalog built:",
+            SKELETON_CATALOG.length,
+            "structures"
+        );
 
         anatomy.add(model);
 
@@ -409,7 +621,7 @@ function selectBone(mesh) {
         }
 
         const key = mesh.userData.modelKey || mesh.name;
-const data = SKELETON_DATA[key];
+const data = getSkeletonData(key);
 
 const name =
     data?.name ||
@@ -503,47 +715,78 @@ function pointerDown(event) {
 
     raycaster.setFromCamera(pointer, camera);
 
-    const hits = raycaster.intersectObjects(clickable, false);
+    const hits = raycaster
+    .intersectObjects(clickable, true)
+    .filter((hit) => hit.object.userData?.isRealAnatomy);
 
     if (!hits.length) return;
 
     const mesh = hits[0].object;
+
+    console.log(
+        "Anatomy tap:",
+        mesh.name,
+        mesh.userData?.modelKey,
+        mesh.userData?.name
+    );
 
     if (identifyMode) {
         const key = mesh.userData.modelKey || mesh.name;
 
         identifyAttempts += 1;
 
-        identifyAttemptsEl.textContent =
-            `Attempts: ${identifyAttempts}`;
-
         if (key === identifyTarget) {
             identifyScore += 1;
+            identifyStreak += 1;
+            identifyQuestions += 1;
 
-            identifyScoreEl.textContent =
-                `Score: ${identifyScore}`;
+            if (identifyStreak > identifyBestStreak) {
+                identifyBestStreak = identifyStreak;
+            }
+
+            updateIdentifyStats();
+
+            const correctData = getSkeletonData(identifyTarget);
+            const correctName =
+                correctData?.name ||
+                identifyTarget ||
+                "structure";
 
             identifyFeedback.textContent =
-                `✦ Correct! You identified the ${SKELETON_DATA[identifyTarget].name}.`;
+                `✦ Correct! You identified the ${correctName}.`;
+
+            identifyNextBtn.classList.add("hidden");
 
             selectBone(mesh);
 
+            if (identifyQuestions >= IDENTIFY_SESSION_LENGTH) {
+                showIdentifyComplete();
+                return;
+            }
+
             setTimeout(() => {
-                if (identifyMode) {
+                if (identifyMode && identifyTarget) {
                     chooseNextIdentifyTarget();
                 }
             }, 900);
         } else {
+            identifyStreak = 0;
+
             identifyFeedback.textContent =
                 "◇ Not quite. Try another structure.";
+
+            identifyNextBtn.classList.remove("hidden");
+
+            updateIdentifyStats();
         }
 
         return;
     }
 
+
+
     selectBone(mesh);
 }
-
 renderer.domElement.addEventListener("pointerdown", pointerDown);
 
 
@@ -597,5 +840,20 @@ function animate() {
 }
 
 animate();
-identifyBtn.addEventListener("click", startIdentifyChallenge);
-identifyExitBtn.addEventListener("click", exitIdentifyMode);
+identifyBtn.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+});
+
+identifyBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    startIdentifyChallenge();
+});
+
+identifyExitBtn.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+});
+
+identifyExitBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    exitIdentifyMode();
+});

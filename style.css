@@ -217,30 +217,131 @@ footer {
 
 .identify-panel {
     margin-top: 14px;
-    padding: 18px;
-    border-radius: 18px;
+    padding: 20px;
+    border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.035);
 }
 
 .identify-question {
-    margin-top: 8px;
+    margin-top: 10px;
+    margin-bottom: 0;
 }
 
 .identify-stats {
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    margin-top: 14px;
-    font-size: 0.85rem;
-    opacity: 0.8;
+    margin-top: 16px;
+    padding: 10px 0;
+    font-size: 0.82rem;
+    opacity: 0.78;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .identify-feedback {
+    margin-top: 16px;
+    padding: 13px 14px;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.035);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+#identifyExitBtn {
+    display: block;
+    width: 100%;
+    margin-top: 18px;
+    opacity: 0.62;
+    font-size: 0.82rem;
+    border-color: rgba(255, 255, 255, 0.05);
+    background: transparent;
+}
+
+#identifyExitBtn:active {
+    opacity: 0.9;
+}
+
+/* Long anatomical names stay inside the mobile viewport. */
+#structureName,
+#identifyQuestion {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.difficulty-selector {
     margin-top: 14px;
-    padding: 12px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.04);
-    font-size: 0.9rem;
-    line-height: 1.45;
+    display: grid;
+    gap: 10px;
+}
+
+.difficulty-label {
+    font-size: 0.85rem;
+    opacity: 0.65;
+    margin-bottom: 2px;
+}
+
+.difficulty-btn {
+    width: 100%;
+    padding: 13px 15px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.difficulty-btn span {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    opacity: 0.55;
+}
+
+.difficulty-btn:active,
+.difficulty-btn.selected {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+
+.difficulty-selector {
+    margin-top: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.difficulty-label {
+    font-size: 0.85rem;
+    opacity: 0.65;
+    margin-bottom: 2px;
+}
+
+.difficulty-btn {
+    width: 100%;
+    padding: 13px 15px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.difficulty-btn span {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    opacity: 0.55;
+}
+
+.difficulty-btn:active,
+.difficulty-btn.selected {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.16);
 }

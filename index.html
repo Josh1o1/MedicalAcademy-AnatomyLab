@@ -72,6 +72,25 @@
 
         <section id="identifyPanel" class="identify-panel hidden">
             <div class="section-label">🎯 IDENTIFY CHALLENGE</div>
+            <div id="difficultySelector" class="difficulty-selector">
+                <div class="difficulty-label">Choose your challenge</div>
+
+                <button class="difficulty-btn" data-difficulty="beginner">
+                    🌱 Beginner
+                    <span>Major bones</span>
+                </button>
+
+                <button class="difficulty-btn" data-difficulty="intermediate">
+                    🔬 Intermediate
+                    <span>More detailed structures</span>
+                </button>
+
+                <button class="difficulty-btn" data-difficulty="advanced">
+                    🧠 Advanced
+                    <span>Small and complex structures</span>
+                </button>
+            </div>
+
 
             <h2 id="identifyQuestion">
                 Find the requested structure.
@@ -80,11 +99,17 @@
             <div class="identify-stats">
                 <span id="identifyAttempts">Attempts: 0</span>
                 <span id="identifyScore">Score: 0</span>
+                <span id="identifyAccuracy">Accuracy: 0%</span>
+                <span id="identifyStreak">Streak: 0</span>
             </div>
 
             <div id="identifyFeedback" class="identify-feedback">
                 Select the structure you think is correct.
             </div>
+
+            <button id="identifyNextBtn" class="secondary-btn hidden">
+                → Next Question
+            </button>
 
             <button id="identifyExitBtn" class="secondary-btn">
                 × Exit Identify Mode
@@ -112,7 +137,7 @@
 
 </div>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=20260910"></script>
 
 </body>
 </html>
