@@ -4,7 +4,7 @@ import {
 
 import {
     buildSkeletonCatalog,
-} from "../anatomy/skeleton-catalog.js";
+} from "../anatomy/skeleton-catalog.js?v=20260911";
 
 export const skeletalSystem = {
     id: "skeletal",
