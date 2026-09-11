@@ -130,8 +130,12 @@ let identifyBestStreak = 0;
 let identifyQuestions = 0;
 const IDENTIFY_SESSION_LENGTH = 10;
 let IDENTIFY_POOL = [];
+let IDENTIFY_QUEUE = [];
+let IDENTIFY_USED = new Set();
 let ACTIVE_CATALOG = [];
 let identifyDifficulty = null;
+let identifyLocked = false;
+let identifyQuestionHadMistake = false;
 
 const difficultySelector =
     document.getElementById("difficultySelector");
@@ -154,6 +158,8 @@ function startIdentifyChallenge() {
     }
 
     identifyMode = true;
+    identifyLocked = false;
+
     identifyAttempts = 0;
     identifyScore = 0;
     identifyStreak = 0;
@@ -161,12 +167,22 @@ function startIdentifyChallenge() {
     identifyQuestions = 0;
     identifyDifficulty = null;
 
-    identifyPanel.classList.remove("hidden");
+    IDENTIFY_POOL = [];
+    IDENTIFY_QUEUE = [];
+    IDENTIFY_USED = new Set();
+    identifyTarget = null;
 
+    identifyPanel.classList.remove("hidden");
     difficultySelector.classList.remove("hidden");
+
+    difficultyButtons.forEach((button) => {
+        button.classList.remove("selected");
+    });
 
     identifyQuestion.textContent =
         "Choose a difficulty to begin.";
+
+    identifyNextBtn.classList.add("hidden");
 
     updateIdentifyStats();
 
@@ -175,18 +191,36 @@ function startIdentifyChallenge() {
 }
 
 function startDifficultyChallenge(difficulty) {
+    if (!identifyMode || identifyLocked) {
+        return;
+    }
+
     const pool = ACTIVE_CATALOG
         .filter((item) => item.difficulty === difficulty)
         .map((item) => item.key);
 
-    if (pool.length === 0) {
+    if (pool.length < IDENTIFY_SESSION_LENGTH) {
         identifyFeedback.textContent =
-            "No structures are available for this difficulty yet.";
+            `This difficulty currently has only ${pool.length} unique structures. ` +
+            `A full challenge requires ${IDENTIFY_SESSION_LENGTH}.`;
         return;
     }
 
     identifyDifficulty = difficulty;
-    IDENTIFY_POOL = pool;
+
+    // Shuffle once, then consume each target exactly once.
+    IDENTIFY_QUEUE = [...pool].sort(() => Math.random() - 0.5);
+    IDENTIFY_POOL = [...IDENTIFY_QUEUE];
+    IDENTIFY_USED = new Set();
+
+    identifyAttempts = 0;
+    identifyScore = 0;
+    identifyStreak = 0;
+    identifyBestStreak = 0;
+    identifyQuestions = 0;
+    identifyTarget = null;
+    identifyLocked = false;
+    identifyQuestionHadMistake = false;
 
     difficultySelector.classList.add("hidden");
 
@@ -197,21 +231,16 @@ function startDifficultyChallenge(difficulty) {
         );
     });
 
-    identifyAttempts = 0;
-    identifyScore = 0;
-    identifyStreak = 0;
-    identifyBestStreak = 0;
-    identifyQuestions = 0;
-
-    identifyAttemptsEl.textContent = "Attempts: 0";
-    identifyScoreEl.textContent = "Score: 0";
-
+    updateIdentifyStats();
     chooseNextIdentifyTarget();
 }
 
 difficultyButtons.forEach((button) => {
     button.addEventListener("click", (event) => {
         event.stopPropagation();
+
+        if (identifyLocked) return;
+
         startDifficultyChallenge(
             button.dataset.difficulty
         );
@@ -221,28 +250,28 @@ difficultyButtons.forEach((button) => {
 identifyNextBtn.addEventListener("click", (event) => {
     event.stopPropagation();
 
-    if (!identifyMode || !identifyTarget) return;
+    // Kept as a safety fallback. A question is normally
+    // advanced automatically only after a correct answer.
+    if (!identifyMode || identifyLocked || !identifyTarget) {
+        return;
+    }
 
-    identifyStreak = 0;
-    identifyAttempts = 0;
-
-    updateIdentifyStats();
     chooseNextIdentifyTarget();
 });
 
 function updateIdentifyStats() {
     const accuracy =
-        identifyAttempts > 0
+        identifyQuestions > 0
             ? Math.round(
-                (identifyScore / identifyAttempts) * 100
+                (identifyScore / identifyQuestions) * 100
             )
             : 0;
 
     identifyAttemptsEl.textContent =
-        `Attempts: ${identifyAttempts}`;
+        `Guesses: ${identifyAttempts}`;
 
     identifyScoreEl.textContent =
-        `Score: ${identifyScore}`;
+        `Correct: ${identifyScore}`;
 
     identifyAccuracyEl.textContent =
         `Accuracy: ${accuracy}%`;
@@ -252,10 +281,12 @@ function updateIdentifyStats() {
 }
 
 function showIdentifyComplete() {
+    identifyLocked = true;
+
     const accuracy =
-        IDENTIFY_SESSION_LENGTH > 0
+        identifyQuestions > 0
             ? Math.round(
-                (identifyScore / IDENTIFY_SESSION_LENGTH) * 100
+                (identifyScore / identifyQuestions) * 100
             )
             : 0;
 
@@ -293,12 +324,17 @@ function showIdentifyComplete() {
 
             <div class="complete-stat">
                 <span>Questions</span>
-                <strong>${IDENTIFY_SESSION_LENGTH}</strong>
+                <strong>${identifyQuestions}</strong>
             </div>
 
             <div class="complete-stat">
                 <span>Correct</span>
                 <strong>${identifyScore}</strong>
+            </div>
+
+            <div class="complete-stat">
+                <span>Guesses</span>
+                <strong>${identifyAttempts}</strong>
             </div>
 
             <div class="complete-stat">
@@ -314,25 +350,165 @@ function showIdentifyComplete() {
             <div class="complete-message">
                 ${message}
             </div>
+
+            <div class="complete-divider">━━━━━━━━━━━━━━━━━━━━</div>
+
+            <div class="complete-next-label">
+                WHAT'S NEXT?
+            </div>
+
+            <div class="complete-actions">
+                <button
+                    type="button"
+                    class="secondary-btn identify-action-btn"
+                    data-identify-action="new"
+                >
+                    ▶️ New ${difficultyName.replace(/^\S+\s*/, "")} Challenge
+                </button>
+
+                ${identifyDifficulty !== "advanced" ? `
+                    <button
+                        type="button"
+                        class="secondary-btn identify-action-btn"
+                        data-identify-action="next-difficulty"
+                    >
+                        ${identifyDifficulty === "beginner"
+                            ? "⚡ Try Intermediate"
+                            : "🏆 Try Advanced"}
+                    </button>
+                ` : ""}
+
+                <button
+                    type="button"
+                    class="secondary-btn identify-action-btn"
+                    data-identify-action="difficulty"
+                >
+                    ↺ Change Difficulty
+                </button>
+            </div>
         </div>
     `;
 
     identifyNextBtn.classList.add("hidden");
-    identifyExitBtn.textContent = "↻ Exit Identify Mode";
+    identifyExitBtn.textContent = "↻ Exit Identify";
 
     identifyTarget = null;
     clearSelection();
+
+    const actionButtons =
+        identifyFeedback.querySelectorAll(
+            "[data-identify-action]"
+        );
+
+    actionButtons.forEach((button) => {
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+
+            const action =
+                button.dataset.identifyAction;
+
+            if (action === "new") {
+                identifyLocked = false;
+
+                startDifficultyChallenge(
+                    identifyDifficulty
+                );
+                return;
+            }
+
+            if (action === "difficulty") {
+                identifyLocked = false;
+                identifyTarget = null;
+
+                difficultySelector.classList.remove("hidden");
+                identifyQuestion.textContent =
+                    "Choose a difficulty to begin.";
+
+                identifyFeedback.textContent =
+                    "Select a new challenge level.";
+
+                identifyNextBtn.classList.add("hidden");
+
+                difficultyButtons.forEach((difficultyButton) => {
+                    difficultyButton.classList.remove("selected");
+                });
+
+                updateIdentifyStats();
+                return;
+            }
+
+            if (action === "next-difficulty") {
+                const nextDifficulty = {
+                    beginner: "intermediate",
+                    intermediate: "advanced"
+                }[identifyDifficulty];
+
+                if (nextDifficulty) {
+                    identifyLocked = false;
+
+                    startDifficultyChallenge(
+                        nextDifficulty
+                    );
+                }
+            }
+        });
+    });
 }
 
 function chooseNextIdentifyTarget() {
+    if (
+        !identifyMode ||
+        identifyLocked ||
+        !identifyDifficulty
+    ) {
+        return;
+    }
+
+    // The queue contains every eligible structure exactly once.
+    // Consume it sequentially so a target cannot repeat.
+    identifyTarget = null;
+
+    while (IDENTIFY_QUEUE.length > 0) {
+        const candidate = IDENTIFY_QUEUE.shift();
+
+        if (!IDENTIFY_USED.has(candidate)) {
+            identifyTarget = candidate;
+            IDENTIFY_USED.add(candidate);
+            break;
+        }
+    }
+
+    // If the queue is exhausted before 10 questions,
+    // something is wrong with the challenge state.
+    if (!identifyTarget) {
+        console.error(
+            "❌ Identify queue exhausted:",
+            {
+                questions: identifyQuestions,
+                used: IDENTIFY_USED.size,
+                remaining: IDENTIFY_QUEUE.length,
+                difficulty: identifyDifficulty
+            }
+        );
+
+        identifyLocked = true;
+
+        identifyFeedback.textContent =
+            "The challenge could not complete all 10 unique questions.";
+
+        return;
+    }
+
+    // This counts the question currently being presented.
+    identifyQuestions += 1;
+
+    identifyQuestionHadMistake = false;
+    identifyLocked = false;
+
     identifyNextBtn.classList.add("hidden");
-    const randomIndex = Math.floor(
-        Math.random() * IDENTIFY_POOL.length
-    );
 
-    identifyTarget = IDENTIFY_POOL[randomIndex];
-
-    const data = getCurrentSystem().getData?.(identifyTarget);
+    const data =
+        getCurrentSystem().getData?.(identifyTarget);
 
     const displayName =
         data?.name ||
@@ -340,15 +516,14 @@ function chooseNextIdentifyTarget() {
         "requested structure";
 
     identifyQuestion.textContent =
+        `Question ${identifyQuestions}/${IDENTIFY_SESSION_LENGTH} · ` +
         `Find the ${displayName}.`;
-
-    identifyAttemptsEl.textContent = "Attempts: 0";
-
-    identifyScoreEl.textContent =
-        `Score: ${identifyScore}`;
 
     identifyFeedback.textContent =
         "Rotate the model and tap the structure you think is correct.";
+
+    updateIdentifyStats();
+
 }
 
 function exitIdentifyMode() {
@@ -941,53 +1116,83 @@ function pointerDown(event) {
     );
 
     if (identifyMode) {
-        const key = mesh.userData.modelKey || mesh.name;
+        if (identifyLocked || !identifyTarget) {
+            return;
+        }
 
+        const key =
+            mesh.userData.modelKey ||
+            mesh.name;
+
+        // Every tap counts as a guess across the entire challenge.
         identifyAttempts += 1;
 
         if (key === identifyTarget) {
-            identifyScore += 1;
-            identifyStreak += 1;
-            identifyQuestions += 1;
+            const correctData =
+                getCurrentSystem().getData?.(
+                    identifyTarget
+                );
 
-            if (identifyStreak > identifyBestStreak) {
-                identifyBestStreak = identifyStreak;
-            }
-
-            updateIdentifyStats();
-
-            const correctData = getCurrentSystem().getData?.(identifyTarget);
             const correctName =
                 correctData?.name ||
                 identifyTarget ||
                 "structure";
 
-            identifyFeedback.textContent =
-                `✦ Correct! You identified the ${correctName}.`;
+            // "Correct" means correct on the first guess.
+            if (!identifyQuestionHadMistake) {
+                identifyScore += 1;
+                identifyStreak += 1;
 
-            identifyNextBtn.classList.add("hidden");
+                if (identifyStreak > identifyBestStreak) {
+                    identifyBestStreak = identifyStreak;
+                }
+            } else {
+                // The structure was eventually identified,
+                // but the first-guess streak is broken.
+                identifyStreak = 0;
+            }
+
+            identifyFeedback.textContent =
+                identifyQuestionHadMistake
+                    ? `✦ Identified! The ${correctName} was correct.`
+                    : `✦ Correct! You identified the ${correctName}.`;
 
             selectBone(mesh);
+            updateIdentifyStats();
 
-            if (identifyQuestions >= IDENTIFY_SESSION_LENGTH) {
+            if (
+                identifyQuestions >=
+                IDENTIFY_SESSION_LENGTH
+            ) {
                 showIdentifyComplete();
                 return;
             }
 
+            identifyLocked = true;
+            identifyNextBtn.classList.add("hidden");
+
             setTimeout(() => {
-                if (identifyMode && identifyTarget) {
-                    chooseNextIdentifyTarget();
+                if (!identifyMode || identifyLocked !== true) {
+                    return;
                 }
-            }, 900);
+
+                identifyLocked = false;
+                chooseNextIdentifyTarget();
+            }, 700);
+
         } else {
+            // A wrong guess stays on the same question.
+            // It also means this question can no longer
+            // contribute to the first-guess score or streak.
+            identifyQuestionHadMistake = true;
             identifyStreak = 0;
 
             identifyFeedback.textContent =
                 "◇ Not quite. Try another structure.";
 
-            identifyNextBtn.classList.remove("hidden");
-
             updateIdentifyStats();
+
+            identifyNextBtn.classList.add("hidden");
         }
 
         return;
